@@ -139,10 +139,6 @@ void check_neighbours(std::string& act_game, int position, std::vector<move> pos
 
 
 std::vector<move> find_possible_moves(std::string& act_game, char player) {
-    // check if empty spot
-    // check if neighbour is opposite color
-    // while opposite color go in this direction
-    // if free add to possible moves
     std::vector<move> possible_moves;
 
     for (int i = 0; i < act_game.size();i++) {
@@ -152,10 +148,6 @@ std::vector<move> find_possible_moves(std::string& act_game, char player) {
     }
 
     return possible_moves;
-    // MUSIM VYMYSLIET AKO UCHOVAVAT MAX_SCORE - NEUCHOVAVAT SI VSETKY TAHY ALE VZDY TO POROVNAVAT LEN S JEDNYM MAXIMALNYM
-    // PO NAJDENI POSSIBLE_MOVES:
-        // VYBRAT MAX_SCORE
-        // ZMENIT PODLA ULOZENEJ STRUKTURY ACT_GAME
 }
 
 
@@ -203,118 +195,145 @@ minmax_tree *create_tree(int depth, std::string act_game) {
 
 
 // HEURISTIC FUNCTIONS TO COUNT VALUE OF MOVE
-double calculate_parity(std::string act_game) {
-    int my_coins = 0, opp_coins = 0;
+void calculate_parity_stability(std::string act_game, double& parity, double& empty_spot, double& disk_squares) {
+    int my_coins = 0, opp_coins = 0, my_neighbour_empty = 0, opp_neighbour_empty = 0;
+
+    std::vector<int> neighbours{ -SIZE - 1, -SIZE, -SIZE + 1 , -1, +1, +SIZE - 1, +SIZE , +SIZE + 1 };
+
+    std::vector<int> vec = {    20, -3, 11, 8, 8, 11, -3, 20,
+                                -3, -7, -4, 1, 1, -4, -7, -3,
+                                11, -4, 2, 2, 2, 2, -4, 11,
+                                8, 1, 2, -3, -3, 2, 1, 8,
+                                8, 1, 2, -3, -3, 2, 1, 8,
+                                11, -4, 2, 2, 2, 2, -4, 11,
+                                -3, -7, -4, 1, 1, -4, -7, -3,
+                                20, -3, 11, 8, 8, 11, -3, 20    };
 
     for (int i = 0; i < SIZE * SIZE; i++) {
         if (act_game[i] != '-') {
+            // calculates number of coins & weight of tiles
             if (act_game[i] == my_player.character) {
                 my_coins++;
+                disk_squares += vec[i];
             }
-            else if (act_game[i] != my_player.character) {
+            else {
                 opp_coins++;
+                disk_squares -= vec[i];
+            }
+            // calculates empty spots around tile
+            for (int j = 0; j < SIZE; j++) {
+                int neighbour = i + neighbours[i];
+                if (!out_of_board(i, neighbour) && act_game[neighbour] == ' ') {
+                    if (act_game[i] == my_player.character) {
+                        my_neighbour_empty++;
+                    }
+                    else {
+                        opp_neighbour_empty++;
+                    }
+                }
             }
         }
     }
 
+    // calculates difference between coins
     if (my_coins > opp_coins) {
-        return (100.0 * my_coins) / (my_coins + opp_coins);
+        parity = (100.0 * my_coins) / (my_coins + opp_coins);
     }
     else if (my_coins < opp_coins) {
-        return -(100.0 * opp_coins) / (my_coins + opp_coins);
+        parity = -(100.0 * opp_coins) / (my_coins + opp_coins);
     }
     else {
-        return 0;
+        parity = 0;
+    }
+
+    // calculates empty spots around tile
+    if (my_neighbour_empty > opp_neighbour_empty) {
+        empty_spot = -(100.0 * my_neighbour_empty) / (my_neighbour_empty + opp_neighbour_empty);
+    }
+    else if (my_neighbour_empty < opp_neighbour_empty) {
+        empty_spot = (100.0 * opp_neighbour_empty) / (my_neighbour_empty + opp_neighbour_empty);
+    }
+    else {
+        empty_spot = 0;
     }
 }
 
 
-double calculate_mobility(std::string act_game) {
+void calculate_mobility(std::string act_game, double& mobility) {
     char opp = (my_player.character == 'O') ? ('X') : ('O');
     std::vector<move> my_moves = find_possible_moves(act_game, my_player.character);
     std::vector<move> opp_moves = find_possible_moves(act_game, opp);
 
     if (my_moves.size() > opp_moves.size()) {
-        return (100.0 * my_moves.size()) / (my_moves.size() + opp_moves.size());
+        mobility = (100.0 * my_moves.size()) / (my_moves.size() + opp_moves.size());
     }
     else if (my_moves.size() < opp_moves.size()) {
-        return -(100.0 * opp_moves.size()) / (my_moves.size() + opp_moves.size());
+        mobility =  -(100.0 * opp_moves.size()) / (my_moves.size() + opp_moves.size());
     }
     else {
-        return 0;
+        mobility = 0;
     }
 }
 
 
-double calculate_corners(std::string act_game) {
-    int my_coins = 0, opp_coins = 0;
+double calculate_corners(std::string act_game, double& corners, double& close_corners) {
+    int my_corners = 0, opp_corners = 0;
+    int my_close_corners = 0, opp_close_corners = 0;
     char opp = (my_player.character == 'O') ? ('X') : ('O');
-    std::vector<int> corners = { 0, SIZE - 1, SIZE * (SIZE - 1), SIZE * SIZE - 1 };
+
+    std::vector<int> corners_coor = { 0, SIZE - 1, SIZE * (SIZE - 1), SIZE * SIZE - 1 };
+    std::vector<int> close_corners_coor = { 1, SIZE + 1, SIZE,
+                                        SIZE - 2, 2 * SIZE - 2, 2 * SIZE - 1,
+                                        (SIZE - 2) * SIZE, (SIZE - 2) * SIZE + 1, (SIZE - 1) * SIZE + 1,
+                                        (SIZE - 1) * SIZE - 1, (SIZE - 1) * SIZE - 2, SIZE * SIZE - 2
+    };
     
-    for (int i = 0;i < corners.size();i++) {
-        if (act_game[corners[i]] == my_player.character) {
-            my_coins++;
+    for (int i = 0;i < corners_coor.size();i++) {
+        if (act_game[corners_coor[i]] == my_player.character) {
+            my_corners++;
         }
-        else if (act_game[corners[i]] == opp) {
-            opp_coins++;
+        else if (act_game[corners_coor[i]] == opp) {
+            opp_corners++;
         }
-    }
-
-    return 25 * (my_coins - opp_coins); //HODIT ASI ZDROJ SKADE TIE VAHY IDK
-}
-
-
-double calculate_close_corners(std::string act_game) {
-    int my_coins = 0, opp_coins = 0;
-    char opp = (my_player.character == 'O') ? ('X') : ('O');
-    std::vector<int> corners = { 0, SIZE - 1, SIZE * (SIZE - 1), SIZE * SIZE - 1 };
-    std::vector<int> close_corners = {  1, SIZE + 1, SIZE,
-                                        SIZE - 2, 2 * SIZE - 2, 2 * SIZE - 1, 
-                                        (SIZE - 2) * SIZE, (SIZE - 2) * SIZE + 1, (SIZE - 1) * SIZE + 1, 
-                                        (SIZE - 1) * SIZE - 1, (SIZE - 1) * SIZE - 2, SIZE * SIZE - 2 
-                                    };
-    
-    for (int i = 0;i < corners.size();i++) {
-        if (act_game[corners[i]] == '-') {
+        else {
             for (int j = 0;j < 3;j++) {
-                if (act_game[close_corners[i * 3 + j]] == my_player.character) {
-                    my_coins++;
+                if (act_game[close_corners_coor[i * 3 + j]] == my_player.character) {
+                    my_close_corners++;
                 }
-                else if (act_game[close_corners[i * 3 + j]] == opp) {
-                    opp_coins++;
+                else if (act_game[close_corners_coor[i * 3 + j]] == opp) {
+                    opp_close_corners++;
                 }
             }
         }
     }
 
-    return -12.5 * (my_coins - opp_coins); //HODIT ASI ZDROJ SKADE TIE VAHY IDK
+    corners = 25 * (my_corners - opp_corners);
+    close_corners = - 12.5 * (my_close_corners - opp_close_corners);
 }
 
 
 double heuristic(std::string act_game) {
-    // 1. COIN PARITY: max-player coins - min-player coins
-    double parity = calculate_parity(act_game);
+    double parity, mobility, corners, close_corners, empty_spots, disk_squares;
+
+    // 1.1 COIN PARITY: difference between max-player and min-player coins
+    // 1.2 STABILITY: how stable coins are
+    calculate_parity_stability(act_game, parity, empty_spots, disk_squares);
 
     // 2. MOBILITY: possible number of moves for max/min player
-    double mobility = calculate_mobility(act_game);
+    calculate_mobility(act_game, mobility);
 
-    // 3.1 CORNERS
-    double corners = calculate_corners(act_game);
-
-    // 3.2 CLOSE CORNERS
-    double close_corners = calculate_close_corners(act_game);
-
-    // 4. STABILITY
+    // 3. CORNERS + CLOSE CORNERS
+    calculate_corners(act_game, corners, close_corners);
 
     // FINAL SCORE
-    return parity + mobility + corners + close_corners + stability;
+    // adding different weights to different evaluations (from source)
+    return (10 * parity) + (801.724 * corners) + (382.026 * close_corners) + (78.922 * mobility) + (74.396 * empty_spots) + (10 * disk_squares);
 }
 
 
 // AI program which returns optimal value for current player
 double minimax(int depth, minmax_tree *node, bool maximizing, int alpha, int beta) {
     if (depth == 0) { //TU TREBA DODAT ZE KED BUDE GAME OVER
-        //TU BUDU HEURISTIKY
         return heuristic();
     }
 
