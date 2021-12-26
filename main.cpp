@@ -93,17 +93,18 @@ bool out_of_board(int act_spot, int neighbour) {
     }
 }
 
+
 bool empty_spot(char act_spot) {
     return act_spot == '-';
 }
 
 
-void check_neighbours(std::string& act_game, int position, std::vector<move> possible_moves, char player) {
+void check_neighbours(std::string& act_game, int position, std::vector<move>& possible_moves, char player) {
     std::vector<int> neighbours{ -SIZE - 1, -SIZE, -SIZE + 1 , -1, +1, +SIZE - 1, +SIZE , +SIZE + 1 };
+    std::vector<int> flippable_temp;
+    flippable_temp.push_back(position); // add start position
 
-    for (int i = 0;i < neighbours.size();i++) {
-        std::vector<int> flippable_temp;
-        flippable_temp.push_back(position); // add start position
+    for (int i = 0;i < neighbours.size();i++) {    
         int curr_position = position + neighbours[i];
 
         do {            
@@ -124,16 +125,16 @@ void check_neighbours(std::string& act_game, int position, std::vector<move> pos
             }
             curr_position += neighbours[i];
         } while (true);
+    }
 
-        // if is at least one flipable spot, add to possible moves
-        if (flippable_temp.size() > 0) {
-            move movement;
-            movement.start = curr_position;
-            movement.end = position;
-            movement.score = flippable_temp.size();
-            movement.flippable_coors = flippable_temp;
-            possible_moves.push_back(movement);
-        }
+    // if is at least one flipable spot, add to possible moves
+    if (flippable_temp.size() > 0) {
+        move movement;
+        //movement.start = curr_position;
+        movement.end = position;
+        //movement.score = flippable_temp.size();
+        movement.flippable_coors = flippable_temp;
+        possible_moves.push_back(movement);
     }
 }
 
@@ -163,27 +164,31 @@ void do_move(std::string& temp_game, move movement) {
 struct minmax_tree {
     minmax_tree** leaves;
     int leaves_count;
-    //std::vector<move> move_list;
-    //std::string game;
-    int val;
+    std::string game;
+    double value;
+    int tile;
 };
 
 
-minmax_tree *create_tree(int depth, std::string act_game) {
+minmax_tree *create_tree(int depth, std::string act_game, int act_tile) {
     minmax_tree *node;
     std::vector<move> act_move_list = find_possible_moves(act_game, my_player.character);
     node->leaves_count = act_move_list.size();
+    std::memcpy(&node->game, &act_game, sizeof act_game);
+    node->tile = act_tile;
 
     // create leaves if we're not too deep and exists at least one move
     if (depth > 0 && node->leaves_count > 0) {
         node->leaves = new minmax_tree *[node->leaves_count];
+
         // for every leaf create nodes with updated board
         for (int i = 0;i < node->leaves_count;i++) {
             std::string temp_game;
             std::memcpy(&temp_game, &act_game, sizeof act_game);
+
             // change board to actual state
             do_move(temp_game, act_move_list[i]);
-            node->leaves[i] = create_tree(depth - 1, temp_game);
+            node->leaves[i] = create_tree(depth - 1, temp_game, act_move_list[i].end);
         }
     }
     else {
@@ -194,7 +199,7 @@ minmax_tree *create_tree(int depth, std::string act_game) {
 }
 
 
-// HEURISTIC FUNCTIONS TO COUNT VALUE OF MOVE
+// heuristic functions to calculate value of movement
 void calculate_parity_stability(std::string act_game, double& parity, double& empty_spot, double& disk_squares) {
     int my_coins = 0, opp_coins = 0, my_neighbour_empty = 0, opp_neighbour_empty = 0;
 
@@ -325,50 +330,88 @@ double heuristic(std::string act_game) {
     // 3. CORNERS + CLOSE CORNERS
     calculate_corners(act_game, corners, close_corners);
 
-    // FINAL SCORE
-    // adding different weights to different evaluations (from source)
+    // FINAL SCORE - adding different weights to different evaluations (from source)
     return (10 * parity) + (801.724 * corners) + (382.026 * close_corners) + (78.922 * mobility) + (74.396 * empty_spots) + (10 * disk_squares);
 }
 
 
 // AI program which returns optimal value for current player
-double minimax(int depth, minmax_tree *node, bool maximizing, int alpha, int beta) {
+double minimax(int depth, minmax_tree *node, bool maximizing, double alpha, double beta) {
     if (depth == 0) { //TU TREBA DODAT ZE KED BUDE GAME OVER
-        return heuristic();
+        return heuristic(node->game);
     }
 
     if (maximizing) {
-        int best_eval = INT_MIN;
-        // Recur for left and right children
-        for (int i = 0; i < node->leaves_count; i++) {
-            int eval = minimax(depth - 1, node->leaves[i], false, alpha, beta);
-            best_eval = std::max(best_eval, eval);
-            alpha = std::max(alpha, best_eval);
+        double max_val = -DBL_MAX;
 
-            // Alpha Beta Pruning
+        // recur for every leaf
+        for (int i = 0; i < node->leaves_count; i++) {
+            double eval = minimax(depth - 1, node->leaves[i], false, alpha, beta);
+            max_val = std::max(max_val, eval);
+
+            // alpha beta pruning
+            alpha = std::max(alpha, max_val);
             if (beta <= alpha) {
                 break;
             }
         }
-        return best_eval;
+        node->value = max_val;
+        return max_val;
     }
     else {
-        int best_eval = INT_MAX;
-        // Recur for left and right children
-        for (int i = 0; i < 2; i++) {
-            int eval = minimax(depth - 1, node->leaves[i], true, alpha, beta);
-            best_eval = std::min(best_eval, eval);
-            beta = std::min(beta, best_eval);
+        double min_val = DBL_MAX;
 
-            // Alpha Beta Pruning
+        // recur for every leaf
+        for (int i = 0; i < 2; i++) {
+            double eval = minimax(depth - 1, node->leaves[i], true, alpha, beta);
+            min_val = std::min(min_val, eval);
+            beta = std::min(beta, min_val);
+
+            // alpha beta pruning
             if (beta <= alpha) {
                 break;
             }
         }
-        return best_eval;
+        node->value = min_val;
+        return min_val;
     }
 }
 
+
+void find_tile(int tile) {
+    int row = tile / SIZE;
+    int col_num = tile % SIZE;
+    char col;
+
+    switch (col_num) {
+    case 0:
+        col = 'A';
+        break;
+    case 1:
+        col = 'B';
+        break;
+    case 2:
+        col = 'C';
+        break;
+    case 3:
+        col = 'D';
+        break;
+    case 4:
+        col = 'E';
+        break;
+    case 5:
+        col = 'F';
+        break;
+    case 6:
+        col = 'G';
+        break;
+    case 7:
+        col = 'H';
+        break;
+    }
+
+    std::cout << row + 1 << col << std::endl;
+}
 
 
 // MAIN PROGRAM
@@ -405,12 +448,18 @@ int main(){
                     check_game(parameters[1]);
                     std::string act_game = parameters[1];
                     // for every turn create game tree
-                    minmax_tree *tree = create_tree(MINMAX_DEPTH, act_game);
+                    minmax_tree *tree = create_tree(MINMAX_DEPTH, act_game, -1);
                     bool maximizer = (my_player.color == 'B') ? true : false;
                     // run minmax algorithm
-                    int return_val = minimax(MINMAX_DEPTH, tree, INT_MIN, INT_MAX, maximizer);
-                    // TU BUDE ESTE DO_MOVE
-                    // PTM TREBA ODPOVEDAT TAHOM - TO MAM VPODTSTE V STRUKTURE MOVE
+                    double return_val = minimax(MINMAX_DEPTH, tree, -DBL_MAX, DBL_MAX, maximizer);
+                    // traverse through first layer of tree to find node with optimal value
+                    for (int i = 0;i < tree->leaves_count;i++) {
+                        if (tree->leaves[i]->value == return_val) {
+                            // find tile and answer
+                            find_tile(tree->leaves[i]->tile);
+                            break;
+                        }
+                    }
                     // TREBA DOIMPLEMENTOVAT CAS
                 }
                 else {
