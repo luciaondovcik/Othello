@@ -87,8 +87,8 @@ void parse_command(std::string command, std::vector<std::string>& parameters) {
 
 
 // GAME MOVES
-bool out_of_board(size_t act_spot, int neighbour) {
-    if (((act_spot + neighbour) < 0) || ((act_spot + neighbour) > 63) || (((act_spot % SIZE) == 0) && ((neighbour % SIZE) == SIZE - 1)) || (((act_spot % SIZE) == SIZE - 1) && ((neighbour % SIZE) == 0))) {
+bool out_of_board(size_t act_spot, size_t neighbour) {
+    if ((neighbour < 0) || (neighbour > 63) || (((act_spot % SIZE) == 0) && ((neighbour % SIZE) == SIZE - 1)) || (((act_spot % SIZE) == SIZE - 1) && ((neighbour % SIZE) == 0))) {
         return true;
     }
     else {
@@ -113,7 +113,8 @@ void check_neighbours(std::string& act_game, size_t position, std::vector<move>&
 
         do {            
             // check out of board
-            if (out_of_board(curr_position - neighbours[i], neighbours[i])) {
+            if (out_of_board(curr_position - neighbours[i], curr_position)) {
+                flippable_temp.erase(flippable_temp.end() - counter, flippable_temp.end());
                 break;
             }
             // if next spot is also empty, nothing to flip            
@@ -165,7 +166,6 @@ void do_move(std::string& temp_game, move movement, char player) {
 }
 
 
-// NEFUNGUJE GAME OVER IDEM SPAT MAM PICI
 bool game_over(std::string& act_game) {
     char opp = (my_player.character == 'O') ? ('X') : ('O');
     std::vector<move> my_moves = find_possible_moves(act_game, my_player.character);
@@ -192,6 +192,7 @@ minmax_tree create_tree(int depth, std::string act_game, size_t act_tile, char p
     node.game = act_game;
     node.tile = act_tile;
 
+    //LEN DOCASNE KVOLI VYPISU
     if (depth == 3) {
         find_tile(node.tile);
     }
@@ -244,7 +245,7 @@ void calculate_parity_stability(std::string act_game, double& parity, double& em
             // calculates empty spots around tile
             for (int j = 0; j < SIZE; j++) {
                 int neighbour = i + neighbours[j];
-                if (!out_of_board(i, neighbours[j]) && act_game[neighbour] == '-') {
+                if (!out_of_board(i, neighbour) && act_game[neighbour] == '-') {
                     if (act_game[i] == my_player.character) {
                         my_neighbour_empty++;
                     }
@@ -353,8 +354,14 @@ double heuristic(std::string act_game) {
 
 // AI program which returns optimal value for current player
 double minmax(int depth, minmax_tree& node, bool maximizing, double alpha, double beta) {
-    if (depth == 0 || game_over(node.game)) {
+    bool game_is_over = game_over(node.game);
+    if (depth == 0) {
         return heuristic(node.game);
+    }
+    if (game_over(node.game)) {
+        double h = heuristic(node.game);
+        node.value = h;
+        return h;
     }
 
     if (maximizing) {
@@ -378,12 +385,12 @@ double minmax(int depth, minmax_tree& node, bool maximizing, double alpha, doubl
         double min_val = DBL_MAX;
 
         // recur for every leaf
-        for (int i = 0; i < 2; i++) {
+        for (size_t i = 0; i < node.leaves_count; i++) {
             double eval = minmax(depth - 1, node.leaves[i], true, alpha, beta);
             min_val = std::min(min_val, eval);
-            beta = std::min(beta, min_val);
 
             // alpha beta pruning
+            beta = std::min(beta, min_val);
             if (beta <= alpha) {
                 break;
             }
