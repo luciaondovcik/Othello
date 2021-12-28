@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <chrono>
 
 const int SIZE = 8;
 const int MINMAX_DEPTH = 4;
@@ -353,8 +354,7 @@ double heuristic(std::string act_game) {
 
 
 // AI program which returns optimal value for current player
-double minmax(int depth, minmax_tree& node, bool maximizing, double alpha, double beta) {
-    bool game_is_over = game_over(node.game);
+double minmax(int depth, minmax_tree& node, bool maximizing, double alpha, double beta, std::chrono::high_resolution_clock::time_point start, bool time_to_return) {
     if (depth == 0) {
         return heuristic(node.game);
     }
@@ -369,8 +369,23 @@ double minmax(int depth, minmax_tree& node, bool maximizing, double alpha, doubl
 
         // recur for every leaf
         for (size_t i = 0; i < node.leaves_count; i++) {
-            double eval = minmax(depth - 1, node.leaves[i], false, alpha, beta);
+            double eval = minmax(depth - 1, node.leaves[i], false, alpha, beta, start, time_to_return);
             max_val = std::max(max_val, eval);
+
+            // if not enough time, return best value
+            if (time_to_return) {
+                node.value = max_val;
+                return max_val;
+            }
+
+            // if not enough time, return best value
+            auto end = std::chrono::high_resolution_clock::now();
+            auto total_time = end - start;
+            if ((my_player.time - total_time.count()) < 0.5) {  // time left is less than 0.5 seconds
+                time_to_return = true;
+                node.value = max_val;
+                return max_val;
+            }
 
             // alpha beta pruning
             alpha = std::max(alpha, max_val);
@@ -386,7 +401,7 @@ double minmax(int depth, minmax_tree& node, bool maximizing, double alpha, doubl
 
         // recur for every leaf
         for (size_t i = 0; i < node.leaves_count; i++) {
-            double eval = minmax(depth - 1, node.leaves[i], true, alpha, beta);
+            double eval = minmax(depth - 1, node.leaves[i], true, alpha, beta, start, time_to_return);
             min_val = std::min(min_val, eval);
 
             // alpha beta pruning
@@ -470,6 +485,8 @@ int main(){
             else if (parameters[0] == "MOVE") {
                 if (assignedStart) {
 
+                    auto start = std::chrono::high_resolution_clock::now();
+
                     // validation
                     check_length(parameters, 2);
                     check_game(parameters[1]);
@@ -480,9 +497,10 @@ int main(){
                     bool maximizer = (my_player.color == 'B') ? true : false;
 
                     // run minmax algorithm
-                    double return_val = minmax(MINMAX_DEPTH, tree, maximizer, -DBL_MAX, DBL_MAX);
+                    double return_val = minmax(MINMAX_DEPTH, tree, maximizer, -DBL_MAX, DBL_MAX, start, false);
 
                     // traverse through first layer of tree to find node with optimal value
+                    // if values doesnt match, there is no signle move and I must pass
                     for (size_t i = 0;i < tree.leaves_count;i++) {
                         if (tree.leaves[i].value == return_val) {
 
@@ -494,7 +512,6 @@ int main(){
                     }
 
                     parameters.clear();
-                    // TREBA DOIMPLEMENTOVAT CAS + KED RAC NEMA TAH DAVA PASS
 
                     // TU BUDE ODPOVED POCITACA PRE OTESTOVANIE
                     std::string pc_game;
