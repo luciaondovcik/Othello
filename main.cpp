@@ -5,10 +5,11 @@
 #include <vector>
 #include <algorithm>
 #include <chrono>
+#include <cfloat>
 
 
 const int SIZE = 8;
-const int MINMAX_DEPTH = 4;
+const int MINMAX_DEPTH = 5;
 
 
 struct player {
@@ -110,11 +111,11 @@ void check_neighbours(std::string& board, size_t position, std::vector<move>& po
     flippable_temp.push_back(position);
 
     // check neigbours
-    for (size_t i = 0;i < neighbours.size();i++) {
+    for (size_t i = 0; i < neighbours.size(); i++) {
         size_t curr_position = position + neighbours[i];
         size_t counter = 0;
 
-        do {            
+        do {
             // check out of board
             if (out_of_board(curr_position - neighbours[i], curr_position)) {
                 flippable_temp.erase(flippable_temp.end() - counter, flippable_temp.end());
@@ -151,7 +152,7 @@ void check_neighbours(std::string& board, size_t position, std::vector<move>& po
 std::vector<move> find_possible_moves(std::string& board, char player) {
     std::vector<move> possible_moves;
 
-    for (size_t i = 0; i < board.size();i++) {
+    for (size_t i = 0; i < board.size(); i++) {
         if (empty_spot(board[i])) {
             check_neighbours(board, i, possible_moves, player);
         }
@@ -161,16 +162,16 @@ std::vector<move> find_possible_moves(std::string& board, char player) {
 }
 
 
-void do_move(std::string& board, move movement, char player) {
-    for (size_t i = 0;i < movement.flippable_coors.size();i++) {
-        size_t coor = movement.flippable_coors[i];
-        (player == 'O') ? (board[coor] = 'O') : (board[coor] = 'X');
+void flip(std::string& board, move movement, char player) {
+    // after choosed move flip coins
+    for (size_t i = 0; i < movement.flippable_coors.size(); i++) {
+        board[movement.flippable_coors[i]] = player;
     }
 }
 
 
 bool game_over(std::string& board, bool maximizer) {
-    char player = (maximizer) ? ('X') : ('O');
+    char player = (maximizer) ? (my_player.character) : ((my_player.character == 'O') ? ('X') : ('O'));
     std::vector<move> possible_moves = find_possible_moves(board, player);
 
     return possible_moves.size() == 0;
@@ -178,32 +179,32 @@ bool game_over(std::string& board, bool maximizer) {
 
 
 // HEURISTIC FUNCTIONS to calculate value of movement
-void calculate_parity_stability(std::string board, double& parity, double& empty_spot, double& disc_squares) {
+void calculate_parity_utility_potencional_mobility(std::string board, double& parity, double& empty_spot, double& disc_squares) {
     size_t my_coins = 0, opp_coins = 0, my_neighbour_empty = 0, opp_neighbour_empty = 0;
     disc_squares = 0;
 
     std::vector<int> neighbours{ -SIZE - 1, -SIZE, -SIZE + 1 , -1, +1, +SIZE - 1, +SIZE , +SIZE + 1 };
 
     // weights of tiles (source: https://github.com/sadeqsheikhi/reversi_python_ai/blob/master/reversiai.py)
-    std::vector<int> vec = {    20, -3, 11, 8, 8, 11, -3, 20,
-                                -3, -7, -4, 1, 1, -4, -7, -3,
-                                11, -4, 2, 2, 2, 2, -4, 11,
-                                8, 1, 2, -3, -3, 2, 1, 8,
-                                8, 1, 2, -3, -3, 2, 1, 8,
-                                11, -4, 2, 2, 2, 2, -4, 11,
-                                -3, -7, -4, 1, 1, -4, -7, -3,
-                                20, -3, 11, 8, 8, 11, -3, 20    };
+    std::vector<int> weights = {    20, -3, 11, 8, 8, 11, -3, 20,
+                                    -3, -7, -4, 1, 1, -4, -7, -3,
+                                    11, -4, 2, 2, 2, 2, -4, 11,
+                                    8, 1, 2, -3, -3, 2, 1, 8,
+                                    8, 1, 2, -3, -3, 2, 1, 8,
+                                    11, -4, 2, 2, 2, 2, -4, 11,
+                                    -3, -7, -4, 1, 1, -4, -7, -3,
+                                    20, -3, 11, 8, 8, 11, -3, 20    };
 
     for (int i = 0; i < SIZE * SIZE; i++) {
         if (board[i] != '-') {
             // calculates number of coins & weight of tiles
             if (board[i] == my_player.character) {
                 my_coins++;
-                disc_squares += vec[i];
+                disc_squares += weights[i];
             }
             else {
                 opp_coins++;
-                disc_squares -= vec[i];
+                disc_squares -= weights[i];
             }
             // calculates empty spots around tile
             for (int j = 0; j < SIZE; j++) {
@@ -253,7 +254,7 @@ void calculate_mobility(std::string board, double& mobility) {
         mobility = (100.0 * my_moves.size()) / (my_moves.size() + opp_moves.size());
     }
     else if (my_moves.size() < opp_moves.size()) {
-        mobility =  -(100.0 * opp_moves.size()) / (my_moves.size() + opp_moves.size());
+        mobility = -(100.0 * opp_moves.size()) / (my_moves.size() + opp_moves.size());
     }
     else {
         mobility = 0;
@@ -271,9 +272,9 @@ void calculate_corners(std::string board, double& corners, double& close_corners
                                                 SIZE - 2, 2 * SIZE - 2, 2 * SIZE - 1,
                                                 (SIZE - 2) * SIZE, (SIZE - 2) * SIZE + 1, (SIZE - 1) * SIZE + 1,
                                                 (SIZE - 1) * SIZE - 1, (SIZE - 1) * SIZE - 2, SIZE * SIZE - 2
-                                             };
-    
-    for (size_t i = 0;i < corners_coor.size();i++) {
+                                            };
+
+    for (size_t i = 0; i < corners_coor.size(); i++) {
         if (board[corners_coor[i]] == my_player.character) {
             my_corners++;
         }
@@ -281,7 +282,7 @@ void calculate_corners(std::string board, double& corners, double& close_corners
             opp_corners++;
         }
         else {
-            for (size_t j = 0;j < 3;j++) {
+            for (size_t j = 0; j < 3; j++) {
                 if (board[close_corners_coor[i * 3 + j]] == my_player.character) {
                     my_close_corners++;
                 }
@@ -301,8 +302,9 @@ double heuristic(std::string board) {
     double parity, mobility, corners, close_corners, empty_spots, disk_squares;
 
     // 1.1 COIN PARITY: difference between max-player and min-player coins
-    // 1.2 STABILITY: how stable coins are
-    calculate_parity_stability(board, parity, empty_spots, disk_squares);
+    // 1.2 UTILITY VALUE: static board of weights associated to each coin position
+    // 1.3 POTENCIONAL MOBILITY: number of possible moves over next few moves
+    calculate_parity_utility_potencional_mobility(board, parity, empty_spots, disk_squares);
 
     // 2. MOBILITY: possible number of moves for max/min player
     calculate_mobility(board, mobility);
@@ -331,7 +333,7 @@ std::pair<double, size_t> minmax(int depth, std::string board, size_t tile, bool
     }
 
     if (maximizer) {
-        std::vector<move> move_list = find_possible_moves(board, 'X');
+        std::vector<move> move_list = find_possible_moves(board, my_player.character);
         std::pair<double, size_t> max_val = { -DBL_MAX, SIZE * SIZE };  // initializing { min value, tile which doesnt exist }
 
         // recur for every leaf
@@ -339,10 +341,10 @@ std::pair<double, size_t> minmax(int depth, std::string board, size_t tile, bool
 
             // must remember tile value of first move
             size_t temp_tile = (tile == SIZE * SIZE) ? move_list[i].tile : tile;
-            
+
             // change board to actual state
             std::string temp_board = board;
-            do_move(temp_board, move_list[i], 'X');
+            flip(temp_board, move_list[i], my_player.character);
 
             std::pair<double, size_t> evaluation = minmax(depth - 1, temp_board, temp_tile, false, alpha, beta, start);
             max_val = (evaluation.first > max_val.first) ? evaluation : max_val;
@@ -361,7 +363,9 @@ std::pair<double, size_t> minmax(int depth, std::string board, size_t tile, bool
         return max_val;
     }
     else {
-        std::vector<move> move_list = find_possible_moves(board, 'O');
+        char opp = (my_player.character == 'O') ? ('X') : ('O');
+
+        std::vector<move> move_list = find_possible_moves(board, opp);
         std::pair<double, size_t> min_val = { DBL_MAX, SIZE * SIZE };  // initializing { max value, tile which doesnt exist }
 
         // recur for every leaf
@@ -371,7 +375,7 @@ std::pair<double, size_t> minmax(int depth, std::string board, size_t tile, bool
 
             // change board to actual state
             std::string temp_board = board;
-            do_move(temp_board, move_list[i], 'O');
+            flip(temp_board, move_list[i], opp);
 
             std::pair<double, size_t> evaluation = minmax(depth - 1, temp_board, temp_tile, true, alpha, beta, start);
             min_val = (evaluation.first < min_val.first) ? evaluation : min_val;
@@ -392,7 +396,7 @@ std::pair<double, size_t> minmax(int depth, std::string board, size_t tile, bool
 }
 
 
-// helper function to answer
+// helper function to answer with concrete position
 void find_tile(size_t tile) {
     size_t row = tile / SIZE;
     size_t col_num = tile % SIZE;
@@ -429,66 +433,75 @@ void find_tile(size_t tile) {
 }
 
 
+// GAME COMMANDS
+void start_command(std::vector<std::string>& parameters, bool& assigned_start) {
+    // validation
+    check_length(parameters, 3);
+    check_color(parameters[1]);
+    check_number(parameters[2]);
+
+    // assigning
+    char color = parameters[1][0];   // string to char
+    (color == 'W') ? (my_player.character = 'O') : (my_player.character = 'X');
+    my_player.time = stoi(parameters[2]);
+    assigned_start = true;
+    std::cout << "1" << std::endl;
+}
+
+
+void stop_command(std::vector<std::string>& parameters) {
+    // validation
+    check_length(parameters, 1);
+    exit(0);
+}
+
+
+void move_command(std::vector<std::string>& parameters, bool& assigned_start) {
+    if (assigned_start) {
+
+        auto start = std::chrono::high_resolution_clock::now();
+
+        // validation
+        check_length(parameters, 2);
+        check_game(parameters[1]);
+        std::string board = parameters[1];
+
+        // minmax algorithm, SIZE^2 bcs it's out of board -> equal to MAX
+        std::pair<double, size_t> return_val = minmax(MINMAX_DEPTH, board, SIZE * SIZE, true, -DBL_MAX, DBL_MAX, start);
+
+        if (return_val.second != SIZE * SIZE) {
+            // find tile and answer
+            find_tile(return_val.second);
+        }
+        else {
+            throw_error("No possible move.");
+        }
+
+    }
+    else {
+        throw_error("START parameters not assigned.");
+    }
+}
+
+
 // MAIN PROGRAM
-int main(){
+int main() {
     std::string command;
     bool assigned_start = false;
 
     while (std::getline(std::cin, command)) {
-        std::vector<std::string> parameters;        
+        std::vector<std::string> parameters;
         parse_command(command, parameters);
-        
+
         if (parameters.size() > 0) {
             if (parameters[0] == "START") {
-                // validation
-                check_length(parameters, 3);
-                check_color(parameters[1]);
-                check_number(parameters[2]);
-
-                // assigning
-                char color = parameters[1][0];   // string to char
-                (color == 'W') ? (my_player.character = 'O') : (my_player.character = 'X');
-                my_player.time = stoi(parameters[2]);
-                assigned_start = true;
-                std::cout << "1" << std::endl;
+                start_command(parameters, assigned_start);
             }
             else if (parameters[0] == "STOP") {
-                // validation
-                check_length(parameters, 1);
-                return 0;
+                stop_command(parameters);
             }
             else if (parameters[0] == "MOVE") {
-                if (assigned_start) {
-
-                    auto start = std::chrono::high_resolution_clock::now();
-
-                    // validation
-                    check_length(parameters, 2);
-                    check_game(parameters[1]);
-                    std::string board = parameters[1];
-
-                    // minmax algorithm
-                    bool maximizer = (my_player.character == 'X') ? true : false;
-                    std::pair<double, size_t> return_val = minmax(MINMAX_DEPTH, board, SIZE * SIZE, maximizer, -DBL_MAX, DBL_MAX, start);    // bcs SIZE^2 is out of board
-
-                    if (return_val.second != SIZE * SIZE) {
-                        // find tile and answer
-                        find_tile(return_val.second);
-                    }
-                    else {
-                        throw_error("No possible move.");
-                    }
-
-                    auto end = std::chrono::high_resolution_clock::now();
-                    std::chrono::duration<double> total_time = duration_cast<std::chrono::duration<double>>(end - start);
-                    std::cout << "cas tahu: " << total_time << std::endl;
-
-                    parameters.clear();
-
-                }
-                else {
-                    throw_error("START parameters not assigned.");
-                }
+                move_command(parameters, assigned_start);
             }
             else {
                 throw_error("Unsupported command.");
